@@ -37,6 +37,19 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "77f054c3-11c8-409b-9cdf-f57c86d2737d"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/77f054c3-11c8-409b-9cdf-f57c86d2737d"
+    },
+    "owner": "tourderwang"
   }
 }
