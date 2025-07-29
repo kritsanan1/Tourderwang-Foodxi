@@ -12,8 +12,199 @@ interface MenuItem {
   available: boolean
 }
 
-interface CartItem extends MenuItem {
-  quantity: number
+import React, { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { Restaurant, MenuItem, restaurantService, menuService } from '../lib/supabase'
+import { useCart } from '../contexts/CartContext'
+import { useAuth } from '../contexts/AuthContext'
+
+export default function RestaurantMenu() {
+  const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
+  const { addItem, getItemQuantity } = useCart()
+  const navigate = useNavigate()
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null)
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>('ทั้งหมด')
+
+  useEffect(() => {
+    if (!id) return
+
+    const loadRestaurantData = async () => {
+      try {
+        setLoading(true)
+        const [restaurantData, menuData] = await Promise.all([
+          restaurantService.getById(id),
+          menuService.getByRestaurantId(id)
+        ])
+
+        if (!restaurantData) {
+          setError('ไม่พบข้อมูลร้านอาหาร')
+          return
+        }
+
+        setRestaurant(restaurantData)
+        setMenuItems(menuData)
+      } catch (err) {
+        console.error('Error loading restaurant data:', err)
+        setError('เกิดข้อผิดพลาดในการโหลดข้อมูล')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadRestaurantData()
+  }, [id])
+
+  const handleAddToCart = (item: MenuItem) => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    addItem(item)
+  }
+
+  const categories = ['ทั้งหมด', ...new Set(menuItems.map(item => item.category))]
+  const filteredItems = selectedCategory === 'ทั้งหมด' 
+    ? menuItems 
+    : menuItems.filter(item => item.category === selectedCategory)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-300 rounded w-1/2 mb-4"></div>
+            <div className="h-4 bg-gray-300 rounded w-1/4 mb-8"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-white rounded-lg shadow-md p-4">
+                  <div className="h-40 bg-gray-300 rounded mb-4"></div>
+                  <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-gray-300 rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !restaurant) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">
+            {error || 'ไม่พบข้อมูลร้านอาหาร'}
+          </h1>
+          <button
+            onClick={() => navigate('/restaurants')}
+            className="bg-primary-500 text-white px-6 py-2 rounded-lg hover:bg-primary-600 transition duration-200"
+          >
+            กลับไปหน้ารายการร้านอาหาร
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-6xl mx-auto px-4">
+        {/* Restaurant Header */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="flex flex-col md:flex-row items-start space-y-4 md:space-y-0 md:space-x-6">
+            <img
+              src={restaurant.image_url || '/placeholder-restaurant.jpg'}
+              alt={restaurant.name}
+              className="w-full md:w-32 h-32 object-cover rounded-lg"
+            />
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {restaurant.name}
+              </h1>
+              <p className="text-gray-600 mb-2">{restaurant.description}</p>
+              <div className="flex items-center space-x-4 text-sm text-gray-500">
+                <span>📍 {restaurant.address}</span>
+                <span>🍽️ {restaurant.cuisine_type}</span>
+                <span>⭐ {restaurant.rating}/5</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Category Filter */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="flex flex-wrap gap-2">
+            {categories.map((category) => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`px-4 py-2 rounded-full text-sm transition duration-200 ${
+                  selectedCategory === category
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Menu Items */}
+        {filteredItems.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <p className="text-gray-500">ไม่พบรายการอาหารในหมวดหมู่นี้</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredItems.map((item) => {
+              const quantity = getItemQuantity(item.id)
+              return (
+                <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <img
+                    src={item.image_url || '/placeholder-food.jpg'}
+                    alt={item.name}
+                    className="w-full h-48 object-cover"
+                  />
+                  <div className="p-4">
+                    <h3 className="font-semibold text-lg text-gray-900 mb-2">
+                      {item.name}
+                    </h3>
+                    <p className="text-gray-600 text-sm mb-3">
+                      {item.description}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-primary-500 font-bold text-lg">
+                        ฿{item.price}
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        {quantity > 0 && (
+                          <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded-full text-sm">
+                            {quantity}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleAddToCart(item)}
+                          className="bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition duration-200"
+                        >
+                          เพิ่มลงตะกร้า
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 const RestaurantMenu: React.FC = () => {
